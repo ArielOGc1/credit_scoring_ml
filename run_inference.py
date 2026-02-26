@@ -11,7 +11,7 @@ def run_inference():
     features = artifact["features"]
 
     # Load new data (simulation)
-    sample_df = load_raw_data("data/raw/bank.csv").sample(5, random_state=42)
+    sample_df = load_raw_data("data/dataset/bank.csv").sample(5, random_state=42)
 
     # Apply preprocessing
     sample_df = bin_age(sample_df)
