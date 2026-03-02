@@ -1,8 +1,21 @@
-# 📊 Credit Scoring Machine Learning Pipeline
+# 📊 Credit Risk Scoring System with Modular ML Architecture
 
 <p align="center">
   <a href="#-project-overview"><img src="https://img.shields.io/badge/🇺🇸_English-selected-blue?style=for-the-badge" alt="English"></a>
   <a href="README.es.md"><img src="https://img.shields.io/badge/🇪🇸_Español-gray?style=for-the-badge" alt="Español"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikitlearn&logoColor=white" alt="scikit-learn">
+  <img src="https://img.shields.io/badge/Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white" alt="Streamlit">
+  <img src="https://img.shields.io/badge/Pandas-150458?style=flat-square&logo=pandas&logoColor=white" alt="Pandas">
+  <img src="https://img.shields.io/badge/NumPy-013243?style=flat-square&logo=numpy&logoColor=white" alt="NumPy">
+  <img src="https://img.shields.io/badge/Matplotlib-11557C?style=flat-square&logo=matplotlib&logoColor=white" alt="Matplotlib">
+</p>
+
+<p align="center">
+  <img src="images/01_ss.png" alt="Credit Risk Scoring Simulator" width="800">
 </p>
 
 ## 📌 Project Overview
@@ -14,11 +27,11 @@ The focus is not only on model performance, but also on **reproducibility, modul
 The pipeline covers the full lifecycle:
 
 - Data ingestion and validation
-- Feature engineering and encoding
+- Feature engineering (binning + WOE encoding)
 - Model training and evaluation
-- Model selection
+- Automated model selection
 - Artifact versioning
-- Inference simulation
+- Interactive scoring simulator (Streamlit)
 
 > [!NOTE]
 > The dataset used is the [Bank Marketing Dataset](https://archive.ics.uci.edu/dataset/222/bank+marketing) from the UCI Machine Learning Repository. The `default` column (indicating whether a client has credit in default) is used as the target variable for credit risk modeling.
@@ -32,9 +45,10 @@ Financial institutions need to assess credit risk to decide whether a client is 
 **Goals:**
 
 - Predict the probability of default (`credit_score`)
-- Handle imbalanced data effectively
+- Handle highly imbalanced data (~1.7% positive class)
 - Build an interpretable and maintainable ML pipeline
 - Ensure consistent behavior between training and inference
+- Provide an interactive tool for threshold analysis
 
 ---
 
@@ -43,36 +57,13 @@ Financial institutions need to assess credit risk to decide whether a client is 
 | Property | Description |
 |---|---|
 | **Target** | `default_binary` (binary: 0/1) |
-| **Class distribution** | ~98.3% non-default / ~1.7% default |
+| **Class distribution** | ~98.3% non-default / ~1.7% default (76 out of 4,521) |
 | **Total samples** | 4,521 |
 | **Feature types** | Mostly categorical (job, education, housing, loan, etc.) |
 | **Numerical features** | Age, balance (binned during preprocessing) |
 
 > [!WARNING]
-> Because the minority class (default) represents only **~1.7%** of the data, metrics such as accuracy are **misleading**. This strongly influenced metric selection and modeling decisions.
-
----
-
-## 🔍 Exploratory Data Analysis (EDA)
-
-An initial EDA was conducted to:
-
-- Understand class imbalance severity
-- Inspect feature distributions
-- Validate binning strategies
-- Identify relationships between categorical variables and default behavior
-
-**Key findings:**
-
-- Strong class imbalance justified using **Precision-Recall based metrics**
-- Some categorical variables showed monotonic relationships with default risk
-- Supported the use of **WOE (Weight of Evidence)** encoding
-
-EDA insights guided:
-
-- Feature binning boundaries
-- Encoding strategy decisions
-- Metric selection priorities
+> Because the minority class (default) represents only **~1.7%** of the data, metrics such as accuracy are **misleading**. This strongly influenced metric selection and modeling decisions throughout the project.
 
 ---
 
@@ -124,51 +115,106 @@ data/dataset/bank.csv
 └─────────────────┘
 ```
 
-### 1. Data Ingestion & Validation
+> [!IMPORTANT]
+> The train/test split is performed **before** any encoding to prevent data leakage. WOE mappings are computed exclusively on the training set and then applied to the test set using the stored mappings.
 
-- Schema validation against a data contract
-- Type checking (numeric vs string)
-- Early failure on invalid inputs
+### Key Pipeline Steps
 
-### 2. Feature Engineering
-
-- **Custom binning**: Age → `[young, adult, middle_age, senior]`, Balance → `[very_low, low, medium, high]`
-- **Weight of Evidence (WOE) encoding** with Laplace smoothing
-- Stored WOE mappings for consistent inference
-
-### 3. Model Training
-
-Models evaluated:
-
-| Model | Configuration | Purpose |
-|---|---|---|
-| Logistic Regression | `class_weight="balanced"`, `solver="liblinear"` | Interpretable baseline |
-| Random Forest | `class_weight="balanced"`, `n_estimators=200` | Non-linear baseline |
-
-Both models use `class_weight="balanced"` to handle class imbalance by internally adjusting sample weights.
+| Step | Description |
+|---|---|
+| **Ingestion** | Schema validation against a data contract + type checking |
+| **Feature Engineering** | Custom binning (age, balance) + WOE encoding with Laplace smoothing |
+| **Training** | Logistic Regression and Random Forest, both with `class_weight="balanced"` |
+| **Evaluation** | Threshold-independent metrics (ROC AUC, Gini, AP, Brier) |
+| **Selection** | Automated filtering → ranking → tie-breaking |
+| **Artifacts** | Versioned model + preprocessing stored via `joblib` |
 
 ---
 
-## 📈 Model Evaluation Strategy
+## 📊 Results & Model Performance
 
-Given the highly imbalanced nature of the problem, evaluation focused on **threshold-independent** metrics:
+### Threshold-Independent Metrics (Test Set)
 
-| Metric | Purpose |
-|---|---|
-| **Average Precision (AP)** | Precision-Recall performance |
-| **ROC AUC** | Ranking/discrimination ability |
-| **Gini Coefficient** | Credit risk industry standard (`2 × ROC AUC − 1`) |
-| **Brier Score** | Probability calibration quality |
-| **Max F1 + Threshold** | Decision trade-off analysis (diagnostic only) |
+These metrics evaluate the model's **ranking ability and probability quality** regardless of any decision threshold:
+
+<p align="center">
+  <img src="images/06_ss.png" alt="Model Quality Metrics" width="800">
+</p>
+
+| Metric | Value | Interpretation |
+|---|---|---|
+| **ROC AUC** | **0.849** | The model correctly ranks a random default above a random non-default **84.9% of the time**. Values above 0.80 are considered good in credit scoring. |
+| **Gini Coefficient** | **0.698** | Industry-standard metric (`2 × AUC − 1`). A Gini of 0.698 indicates **strong discriminatory power** — well above the 0.40 threshold typically expected in banking. |
+| **Average Precision** | **0.075** | Low in absolute terms, but this is **expected** with only 1.7% positives. AP is heavily influenced by the base rate; a random classifier would score ~0.017. Our model achieves **~4.4× better than random**. |
+| **Brier Score** | **0.160** | Measures probability calibration (lower is better, 0 is perfect). A baseline model predicting the base default rate (~1.7%) would achieve a Brier score close to 0.016. Our score of 0.160 reflects imperfect probability calibration and highlights room for improvement. |
+
+### Score Distribution
+
+The histogram below shows how the model distributes default probabilities across all customers:
+
+<p align="center">
+  <img src="images/03_ss.png" alt="Score Distribution" width="800">
+</p>
+
+**Key observations:**
+- The model produces a **clear separation** between high-risk and low-risk customers
+- The majority of customers are clustered at **low default probabilities** (< 0.1), as expected given the class distribution
+- A distinct tail of **high-risk customers** appears above 0.6, indicating the model successfully identifies high-risk profiles
+- The dashed line represents the adjustable **decision threshold** — all customers to the right are flagged as potential defaults
+
+### Threshold-Dependent Metrics (Example at threshold = 0.60)
+
+These metrics change based on the chosen decision threshold and represent the **operational trade-off**:
+
+<p align="center">
+  <img src="images/05_ss.png" alt="Decision Performance and Scored Data" width="800">
+</p>
+
+| Metric | Value | Interpretation |
+|---|---|---|
+| **Accuracy** | 0.774 | Misleading in imbalanced settings — a naive "predict all non-default" classifier achieves 98.3% |
+| **Precision** | 0.061 | Of customers flagged as default, 6.1% actually are. Low due to extreme class imbalance |
+| **Recall** | 0.868 | The model catches **86.8% of actual defaults** — critical for risk management |
+| **F1 Score** | 0.114 | Harmonic mean of precision and recall. Low F1 is expected and **not a failure** — it reflects the mathematical reality of imbalanced data |
 
 > [!IMPORTANT]
-> Threshold optimization (Max F1) was analyzed but **not used for model selection**, as the decision threshold should be defined by business requirements, not by maximizing a metric.
+> **Why is precision so low?** With only 76 defaults in 4,521 records (1.7%), even a good model will flag many non-defaults. This is the **precision-recall trade-off** inherent to imbalanced problems. In credit scoring, **high recall** (catching most defaults) is often prioritized over high precision, as the cost of missing a default far outweighs the cost of extra reviews.
+
+### Approval Summary
+
+<p align="center">
+  <img src="images/04_ss.png" alt="Approval Summary" width="800">
+</p>
+
+At threshold = 0.60: **3,444 approved (76.2%)** | **1,077 rejected (23.8%)**
+
+---
+
+## 🖥️ Interactive Scoring Simulator
+
+The project includes a **Streamlit web application** for interactive credit risk scoring:
+
+<p align="center">
+  <img src="images/02_ss.png" alt="Dataset Preview" width="800">
+</p>
+
+**Features:**
+- 📂 Upload any CSV file with the bank data schema
+- 🎯 Adjust the decision threshold in real-time
+- 📊 Visualize score distributions with color-coded histograms
+- ✅ See approval/rejection summaries
+- 🎯 Analyze threshold-dependent metrics (when ground truth is available)
+- 📈 View official model quality metrics
+
+```bash
+streamlit run app.py
+```
 
 ---
 
 ## 🏆 Model Selection
 
-A custom `select_best_model` module:
+A custom `select_best_model` module automates model selection:
 
 1. **Filters** models by a minimum ROC AUC threshold (≥ 0.75)
 2. **Ranks** valid models by the primary metric (Average Precision)
@@ -184,90 +230,62 @@ A custom `select_best_model` module:
 
 ## 📦 Artifact Management
 
-The final model is saved as a **versioned artifact** using `joblib`. Stored artifacts include:
-
-- Trained model object
-- WOE encoding mappings
-- Feature list
-- Model metadata and evaluation metrics
-- Version identifier
+The final model is saved as a **versioned artifact** using `joblib`:
 
 ```
 artifacts/
 └── model_v1/
-    └── model.joblib
+    └── model.joblib    # model + WOE mappings + features + metadata + metrics
 ```
 
 This ensures **reproducibility**, **traceability**, and supports safe future upgrades (`model_v2`, `model_v3`, etc.).
 
 ---
 
-## 🔮 Inference Simulation
-
-A standalone inference script (`run_inference.py`) demonstrates:
-
-- Loading the saved artifact
-- Applying **identical preprocessing** (binning + WOE with stored mappings)
-- Generating default probabilities (`credit_score`)
-
-**Output:** A continuous probability score per customer, suitable for batch or API-based deployment.
-
-```bash
-python run_inference.py
-```
-
----
-
-## 📁 Project Structure
+## � Project Structure
 
 ```
 credit_scoring/
 ├── main.py                          # Pipeline orchestrator
-├── run_inference.py                 # Inference simulation script
-├── README.md
-├── README.es.md
+├── app.py                           # Streamlit scoring simulator
+├── run_inference.py                 # CLI inference script
+├── requirements.txt
+├── README.md                        # Documentation (English)
+├── README.es.md                     # Documentation (Español)
 ├── data/
 │   └── dataset/
-│       └── bank.csv                 # Raw dataset
+│       └── bank.csv
 ├── artifacts/
 │   └── model_v1/
-│       └── model.joblib             # Serialized model artifact
+│       └── model.joblib
+├── images/                          # Screenshots for documentation
 ├── notebooks/
 │   └── 01_exploratory_data_analysis.ipynb
 └── source/
-    ├── __init__.py
     ├── ingestion/
-    │   └── load_data.py             # Data loading & validation
+    │   └── load_data.py
     ├── preprocessing/
-    │   └── feature_engineering.py   # Binning, WOE encoding
+    │   └── feature_engineering.py
     ├── training/
-    │   └── model_training.py        # Split, feature select, train
+    │   └── model_training.py
     ├── evaluation/
-    │   ├── model_evaluation.py      # Metrics computation
-    │   └── model_selection.py       # Best model selection
+    │   ├── model_evaluation.py
+    │   └── model_selection.py
+    ├── inference/
+    │   └── inference_pipeline.py
     └── artifacts/
-        └── artifact_manager.py      # Save/load artifacts
+        └── artifact_manager.py
 ```
-
----
-
-## ⚠️ Challenges Encountered
-
-- **Severe class imbalance** (~1.7% default rate) limited recall-based metrics and made Precision-Recall curves noisy
-- **Environment compatibility issues** between NumPy versions and compiled libraries
-- **Module resolution challenges** when structuring inference scripts as separate entry points
-
-All issues were resolved using proper environment management, explicit artifact versioning, and modular pipeline design.
 
 ---
 
 ## 📌 Key Conclusions
 
-1. **Class imbalance significantly limits achievable F1 and AP** — this is expected, not a failure
-2. **ROC AUC and Gini are more stable** and reliable indicators for this scenario
-3. **Logistic Regression remains a strong baseline** for credit scoring due to interpretability
-4. **Artifact versioning is critical** for real-world ML systems
-5. **A correct pipeline matters more** than chasing marginal metric gains
+1. **ROC AUC of 0.849 and Gini of 0.698** demonstrate the model has strong discriminatory power for separating defaulters from non-defaulters
+2. **Low AP and F1 are expected**, not a failure — they reflect the mathematical reality of extreme class imbalance (1.7% positives)
+3. **Logistic Regression outperformed Random Forest**, confirming that simpler, interpretable models can excel in credit scoring
+4. **The pipeline design matters more** than chasing marginal metric gains — proper split before encoding, artifact versioning, and inference consistency are key
+5. **An interactive simulator** enables stakeholders to explore threshold trade-offs without touching code
 
 ---
 
@@ -278,3 +296,25 @@ All issues were resolved using proper environment management, explicit artifact 
 - [ ] Build **API deployment** (FastAPI)
 - [ ] Add **batch scoring** interface
 - [ ] Implement **monitoring & drift detection**
+- [ ] Improve **probability calibration** (Platt scaling / isotonic regression)
+
+---
+
+## ⚙️ Setup & Usage
+
+```bash
+# Create environment
+conda create -n credit_scoring python=3.11 numpy=1.26 pandas scipy scikit-learn matplotlib seaborn joblib streamlit
+
+# Activate environment
+conda activate credit_scoring
+
+# Train pipeline
+python main.py
+
+# Run Streamlit app
+streamlit run app.py
+
+# Run CLI inference
+python run_inference.py
+```
